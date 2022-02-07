@@ -115,7 +115,7 @@ impl fmt::Display for Filter {
     }
 }
 
-// TODO: Check that query.data and secret.data have the same length
+// TODO: Check that query.data and secret.data have length equal to WORD_LENGTH
 fn compute_filter(query: &Word, secret: &Word) -> Filter {
     let mut filter = Filter::new();
 
@@ -199,7 +199,7 @@ fn compute_query_cost(query: &Word, word_bank: &Vec<Word>) -> (usize, HashMap<Fi
 }
 
 /*
-* TODO: Check that input is exactly five words
+* TODO: Check that input is exactly WORD_LENGTH words
 * TODO: CHeck that all words in input are either gray, yellow, or green
 */
 fn get_filter_from_input() -> Filter {
