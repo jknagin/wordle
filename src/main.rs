@@ -69,7 +69,7 @@ fn get_word_bank(fname: &str) -> Vec<Word> {
     word_bank_word
 }
 
-#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
 enum Color {
     GRAY,
     YELLOW,
@@ -88,30 +88,24 @@ impl fmt::Display for Color {
 
 const WORD_LENGTH: usize = 5;
 
-#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
 struct Filter {
     colors: [Color; WORD_LENGTH],
 }
 impl Filter {
     fn new() -> Self {
         Filter {
-            colors: [Color::GRAY; WORD_LENGTH],
+            colors: [Color::GRAY, Color::GRAY, Color::GRAY, Color::GRAY, Color::GRAY],
         }
     }
 }
 
 impl fmt::Display for Filter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // TODO: Scale with WORD_LENGTH
-        write!(
-            f,
-            "{}{}{}{}{}",
-            self.colors[0], self.colors[1], self.colors[2], self.colors[3], self.colors[4]
-        )
+        write!(f, "{}{}{}{}{}", self.colors[0], self.colors[1], self.colors[2], self.colors[3], self.colors[4])
     }
 }
 
-// TODO: Check that query.data and secret.data have length equal to WORD_LENGTH
 fn compute_filter(query: &Word, secret: &Word) -> Filter {
     let mut filter = Filter::new();
 
@@ -154,21 +148,17 @@ fn compute_filter(query: &Word, secret: &Word) -> Filter {
     filter
 }
 
-fn compute_filters_to_secret_candidates_for_query(
-    query: &Word,
-    secret_candidates: &Vec<Word>,
-) -> HashMap<Filter, Vec<Word>> {
+fn compute_filters_to_secret_candidates_for_query( query: &Word, secret_candidates: &Vec<Word>) -> HashMap<Filter, Vec<Word>> {
     let mut filters_to_secret_candidates: HashMap<Filter, Vec<Word>> = HashMap::new();
     for secret in secret_candidates {
         let filter = compute_filter(&query, &secret);
-        filters_to_secret_candidates
-            .entry(filter)
-            .or_insert(Vec::new());
-        filters_to_secret_candidates
-            .get_mut(&filter)
-            .unwrap()
-            .push(secret.clone())
+        let mapped_candidates = filters_to_secret_candidates.get_mut(&filter);
+        match mapped_candidates {
+            Some(p) => p.push(secret.clone()),
+            None => drop(filters_to_secret_candidates.insert(filter.clone(), Vec::new())),
+            }
     }
+
     filters_to_secret_candidates
 }
 
@@ -196,7 +186,7 @@ fn compute_query_cost(query: &Word, word_bank: &Vec<Word>) -> (usize, HashMap<Fi
 
 /*
 * TODO: Check that input is exactly WORD_LENGTH words
-* TODO: CHeck that all words in input are either gray, yellow, or green
+* TODO: Check that all words in input are either gray, yellow, or green
 */
 fn get_filter_from_input() -> Filter {
     let mut input = String::new();
