@@ -13,7 +13,27 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::cmp::min;
 
-fn get_word_bank(fname: &str) -> Vec<String> {
+#[derive(Clone)]
+struct Word {
+    map: HashMap<u8, HashSet<usize>>,
+    data: String
+}
+
+impl Word {
+    fn new(word_string: &String) -> Self {
+            let mut map_: HashMap<u8, HashSet<usize>> = HashMap::new();
+            for (idx, letter) in word_string.chars().enumerate() {
+                let indices = map_.entry(letter as u8).or_insert(HashSet::new());
+                indices.insert(idx);
+            }
+            Word {
+            map: map_,
+            data: word_string.clone()
+        }
+    }
+}
+
+fn get_word_bank(fname: &str) -> Vec<Word> {
     let path = Path::new(fname);
     let mut file = match File::open(path) {
         Ok(file) => file,
@@ -27,11 +47,12 @@ fn get_word_bank(fname: &str) -> Vec<String> {
     };
 
     let word_bank: Vec<&str> = contents.split('\n').collect();
-    let mut word_bank_string: Vec<String> = Vec::new();
+    let mut word_bank_word: Vec<Word> = Vec::new();
     for word in word_bank {
-        word_bank_string.push(word.to_string());
+        let w: Word = Word::new(&String::from(word));
+        word_bank_word.push(w);
     }
-    word_bank_string
+    word_bank_word
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
@@ -76,71 +97,61 @@ fn letters_to_indices_map(word: &String) -> HashMap<u8, HashSet<usize>> {
         let indices = map.entry(letter as u8).or_insert(HashSet::new());
         indices.insert(idx);
     }
-
-    // println!("{}, {:?}", word, map);
     map
 }
 
-fn compute_filter(query: &String, secret: &String) -> Filter {
-    let map_query = letters_to_indices_map(&query);
-    let map_secret = letters_to_indices_map(&secret);
+fn compute_filter(query: &Word, secret: &Word) -> Filter {
+    // let map_query = query.map;
+    // let map_secret = letters_to_indices_map(&secret);
     let mut filter = Filter::new();
 
-    for i in 0..query.len() {
-        println!("========");
+    for i in 0..query.data.len() {
         // Skip grays
-        let letter = query.as_bytes()[i];
-        println!("{}\n", letter);
-        if !map_secret.contains_key(&letter) {
+        let letter = query.data.as_bytes()[i];
+        if !secret.map.contains_key(&letter) {
             continue;
         }
 
         // Greens
-        let query_letter_indices = &map_query[&letter];
-        let secret_letter_indices = &map_secret[&letter];
+        let query_letter_indices = &query.map[&letter];
+        let secret_letter_indices = &secret.map[&letter];
         let green_indices: HashSet<&usize> = query_letter_indices.intersection(secret_letter_indices).collect();
         for idx in &green_indices {
             filter.colors[**idx] = Color::GREEN;
         }
-        println!("filter after applying greens: {}", filter);
-        println!("Query set: {:?}", query_letter_indices);
-        println!("Secret set: {:?}", secret_letter_indices);
-        println!("Green indices: {:?}", green_indices);
 
         // Yellows
         let num_yellows = min(query_letter_indices.len(), secret_letter_indices.len()) - green_indices.len();
 
-        // query index set minus green index set = yellow index set
+        // query index set minus green index set = (potential) yellow index set
         let mut yellow_indices = query_letter_indices.clone();
         for idx in &green_indices {
             yellow_indices.remove(idx);
         }
         let mut yellow_indices_vec = Vec::from_iter(&yellow_indices);
         yellow_indices_vec.sort();
-        println!("Yellow indices: {:?}", yellow_indices);
 
-        // Mark yellow indices as yellow
+        // Mark yellow indices as yellow.
+        // Mark earlier instances as yellow over later instances in the event of duplicate letters
         for i in 0..num_yellows {
             filter.colors[*yellow_indices_vec[i]] = Color::YELLOW;
         }
-
-        println!("filter after applying yellows: {}", filter);
     }
 
     filter
 }
 
-fn compute_filters_to_secret_candidates_for_query(query: &String, secret_candidates: &Vec<String>) -> HashMap<Filter, Vec<String>> {
-    let mut filters_to_secret_candidates: HashMap<Filter, Vec<String>> = HashMap::new();
+fn compute_filters_to_secret_candidates_for_query(query: &Word, secret_candidates: &Vec<Word>) -> HashMap<Filter, Vec<Word>> {
+    let mut filters_to_secret_candidates: HashMap<Filter, Vec<Word>> = HashMap::new();
     for secret in secret_candidates {
         let filter = compute_filter(&query, &secret);
         filters_to_secret_candidates.entry(filter).or_insert(Vec::new());
-        filters_to_secret_candidates.get_mut(&filter).unwrap().push(secret.to_string())
+        filters_to_secret_candidates.get_mut(&filter).unwrap().push(secret.clone())
     }
     filters_to_secret_candidates
 }
 
-fn compute_hashmap_cost(filters_to_secret_candidates_for_query: &HashMap<Filter, Vec<String>>) -> usize {
+fn compute_hashmap_cost(filters_to_secret_candidates_for_query: &HashMap<Filter, Vec<Word>>) -> usize {
     let mut max_count: usize = 0;
 
     for (_, secret_candidates_from_filter) in filters_to_secret_candidates_for_query.iter() {
@@ -153,7 +164,7 @@ fn compute_hashmap_cost(filters_to_secret_candidates_for_query: &HashMap<Filter,
     max_count
 }
 
-fn compute_query_cost(query: &String, word_bank: &Vec<String>) -> (usize, HashMap<Filter, Vec<String>>) {
+fn compute_query_cost(query: &Word, word_bank: &Vec<Word>) -> (usize, HashMap<Filter, Vec<Word>>) {
     let filters_to_secret_candidates_for_query = compute_filters_to_secret_candidates_for_query(&query, &word_bank);
     let hashmap_cost = compute_hashmap_cost(&filters_to_secret_candidates_for_query);
     (hashmap_cost, filters_to_secret_candidates_for_query)
@@ -161,7 +172,7 @@ fn compute_query_cost(query: &String, word_bank: &Vec<String>) -> (usize, HashMa
 
 /*
 * TODO: Check that input is exactly five words
-* TODO: CHeck that all words are either gray, yellow, or green
+* TODO: CHeck that all words in input are either gray, yellow, or green
 */
 fn get_filter_from_input() -> Filter {
     let mut input = String::new();
@@ -181,45 +192,50 @@ fn get_filter_from_input() -> Filter {
     filter
 }
 
-fn compute_best_query(word_bank: &Vec<String>) -> (String, HashMap<Filter, Vec<String>>) {
-    let mut minimum_cost_query: String = word_bank[0].clone();
+fn compute_best_query(word_bank: &Vec<Word>) -> Word {
+    let mut minimum_cost_query: Word = word_bank[0].clone();
     let mut minimum_cost: usize = usize::MAX;
-    let mut minimum_cost_filters_to_secret_candidates: HashMap<Filter, Vec<String>> = HashMap::new();
 
     for query in word_bank {
-        let (cost, filters_to_secret_candidates) = compute_query_cost(query, word_bank);
+        let (cost, _) = compute_query_cost(query, word_bank);
         if cost < minimum_cost {
             minimum_cost = cost;
             minimum_cost_query = query.clone();
-            minimum_cost_filters_to_secret_candidates = filters_to_secret_candidates;
         }
     }
-    (minimum_cost_query, minimum_cost_filters_to_secret_candidates)
+    minimum_cost_query
 }
 
 fn main() {
-    letters_to_indices_map(&String::from("sands"));
+    // letters_to_indices_map(&String::from("sands"));
 
     // Uncomment to test what filter will be generated by a query and a secret
-    println!("final filter: {}", compute_filter(&String::from("oooll"), &String::from("llool")));
-    return;
+    // println!("final filter: {}", compute_filter(&String::from("oooll"), &String::from("llool")));
+    // return;
 
     // Main application
     let mut word_bank = get_word_bank("sgb-words.txt");
-    let mut best_query: String;
-    let mut best_query_filters_to_secret_candidates: HashMap<Filter, Vec<String>>;
+
+    // Best first word is precomputed to save time
+    let mut best_query = Word::new(&String::from("aloes"));
+    let mut best_query_filters_to_secret_candidates: HashMap<Filter, Vec<Word>>;
+
+    let mut guesses = 0;
     let mut filter: Filter;
+
     loop {
-        // Get the best guess
-        let (a,  b) = compute_best_query(&word_bank);
-        best_query = a;
-        best_query_filters_to_secret_candidates = b;
+        // If a guess has already been made, need to compute the next best guess
+        if guesses > 0 {
+            best_query = compute_best_query(&word_bank);
+        }
 
         // Supply best guess to user
-        println!("Best guess: {} ({})", best_query, compute_query_cost(&best_query, &word_bank).0);
+        let (_, b) = compute_query_cost(&best_query, &word_bank);
+        best_query_filters_to_secret_candidates = b;
+        println!("Best guess: {}", best_query.data);
 
-        // filter = get_filter_from_input(); // Get filter from user
-        filter = compute_filter(&best_query, &String::from("skill")); // Calculate filter automatically when secret word is known (testing only)
+        filter = get_filter_from_input(); // Get filter from user
+        // filter = compute_filter(&best_query, &Word::new(&String::from("skill"))); // Calculate filter automatically when secret word is known (testing only)
         println!("Filter received: {}", filter);
 
         // word_bank is the list of words that the filter maps to
@@ -227,7 +243,7 @@ fn main() {
 
         // Check if word bank contains only one word
         if word_bank.len() == 1 {
-            println!("FOUND: {}", word_bank[0]);
+            println!("FOUND: {}", word_bank[0].data);
             break;
         }
 
@@ -240,9 +256,11 @@ fn main() {
         // If there are only a few words left, maybe the user will want to choose a different word
         else if word_bank.len() < 20 {
             for word in &word_bank {
-                println!("Possible word: {} with cost {}", word, compute_query_cost(&word, &word_bank).0)
+                println!("Possible word: {} with cost {}", word.data, compute_query_cost(&word, &word_bank).0)
             }
         }
+
+        guesses += 1;
     }
 }
 
