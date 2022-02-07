@@ -5,31 +5,31 @@
 #![allow(dead_code)]
 #![allow(unreachable_code)]
 
+use std::cmp::min;
+use std::collections::HashMap;
+use std::collections::HashSet;
+use std::env;
+use std::fmt;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
-use std::fmt;
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::cmp::min;
-use std::env;
 
 #[derive(Clone)]
 struct Word {
     map: HashMap<u8, HashSet<usize>>,
-    data: String
+    data: String,
 }
 
 impl Word {
     fn new(word_string: &String) -> Self {
-            let mut map_: HashMap<u8, HashSet<usize>> = HashMap::new();
-            for (idx, letter) in word_string.chars().enumerate() {
-                let indices = map_.entry(letter as u8).or_insert(HashSet::new());
-                indices.insert(idx);
-            }
-            Word {
+        let mut map_: HashMap<u8, HashSet<usize>> = HashMap::new();
+        for (idx, letter) in word_string.chars().enumerate() {
+            let indices = map_.entry(letter as u8).or_insert(HashSet::new());
+            indices.insert(idx);
+        }
+        Word {
             map: map_,
-            data: word_string.clone()
+            data: word_string.clone(),
         }
     }
 }
@@ -38,18 +38,26 @@ fn get_word_bank(fname: &str) -> Vec<Word> {
     let path = Path::new(fname);
     let mut file = match File::open(path) {
         Ok(file) => file,
-        Err(err) => panic!("Could not open {display} because {err}", display=path.display(), err=err)
+        Err(err) => panic!(
+            "Could not open {display} because {err}",
+            display = path.display(),
+            err = err
+        ),
     };
 
     let mut contents = String::new();
     match file.read_to_string(&mut contents) {
         Ok(_) => (),
-        Err(err) => panic!("Could not read {display} because {err}", display=path.display(), err=err)
+        Err(err) => panic!(
+            "Could not read {display} because {err}",
+            display = path.display(),
+            err = err
+        ),
     };
 
     let newline: String = match env::consts::OS {
         "windows" => String::from("\r\n"),
-        _ => String::from("\n")
+        _ => String::from("\n"),
     };
 
     let word_bank: Vec<&str> = contents.split(&newline).collect();
@@ -65,7 +73,7 @@ fn get_word_bank(fname: &str) -> Vec<Word> {
 enum Color {
     GRAY,
     YELLOW,
-    GREEN
+    GREEN,
 }
 
 impl fmt::Display for Color {
@@ -73,7 +81,7 @@ impl fmt::Display for Color {
         match self {
             Color::GRAY => write!(f, "{}", "\u{2B1B}"),
             Color::YELLOW => write!(f, "{}", '\u{1F7E8}'),
-            Color::GREEN => write!(f, "{}", '\u{1F7E9}')
+            Color::GREEN => write!(f, "{}", '\u{1F7E9}'),
         }
     }
 }
@@ -82,15 +90,29 @@ const WORD_LENGTH: usize = 5;
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 struct Filter {
-    colors: [Color; WORD_LENGTH]
+    colors: [Color; WORD_LENGTH],
 }
 impl Filter {
     fn new() -> Self {
         Filter {
-            colors: [Color::GRAY; WORD_LENGTH]
+            colors: [Color::GRAY; WORD_LENGTH],
         }
     }
+}
 
+impl fmt::Display for Filter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut formatted_string = String::new();
+        for i in 0..WORD_LENGTH {
+            formatted_string.push_str("{}");
+        }
+        // TODO: Scale with WORD_LENGTH
+        write!(
+            f,
+            "{}{}{}{}{}",
+            self.colors[0], self.colors[1], self.colors[2], self.colors[3], self.colors[4]
+        )
+    }
 }
 
 // TODO: Check that query.data and secret.data have the same length
@@ -107,13 +129,16 @@ fn compute_filter(query: &Word, secret: &Word) -> Filter {
         // Greens
         let query_letter_indices = &query.map[&letter];
         let secret_letter_indices = &secret.map[&letter];
-        let green_indices: HashSet<&usize> = query_letter_indices.intersection(secret_letter_indices).collect();
+        let green_indices: HashSet<&usize> = query_letter_indices
+            .intersection(secret_letter_indices)
+            .collect();
         for idx in &green_indices {
             filter.colors[**idx] = Color::GREEN;
         }
 
         // Yellows
-        let num_yellows = min(query_letter_indices.len(), secret_letter_indices.len()) - green_indices.len();
+        let num_yellows =
+            min(query_letter_indices.len(), secret_letter_indices.len()) - green_indices.len();
 
         // query index set minus green index set = (potential) yellow index set
         let mut yellow_indices = query_letter_indices.clone();
@@ -133,17 +158,27 @@ fn compute_filter(query: &Word, secret: &Word) -> Filter {
     filter
 }
 
-fn compute_filters_to_secret_candidates_for_query(query: &Word, secret_candidates: &Vec<Word>) -> HashMap<Filter, Vec<Word>> {
+fn compute_filters_to_secret_candidates_for_query(
+    query: &Word,
+    secret_candidates: &Vec<Word>,
+) -> HashMap<Filter, Vec<Word>> {
     let mut filters_to_secret_candidates: HashMap<Filter, Vec<Word>> = HashMap::new();
     for secret in secret_candidates {
         let filter = compute_filter(&query, &secret);
-        filters_to_secret_candidates.entry(filter).or_insert(Vec::new());
-        filters_to_secret_candidates.get_mut(&filter).unwrap().push(secret.clone())
+        filters_to_secret_candidates
+            .entry(filter)
+            .or_insert(Vec::new());
+        filters_to_secret_candidates
+            .get_mut(&filter)
+            .unwrap()
+            .push(secret.clone())
     }
     filters_to_secret_candidates
 }
 
-fn compute_hashmap_cost(filters_to_secret_candidates_for_query: &HashMap<Filter, Vec<Word>>) -> usize {
+fn compute_hashmap_cost(
+    filters_to_secret_candidates_for_query: &HashMap<Filter, Vec<Word>>,
+) -> usize {
     let mut max_count: usize = 0;
 
     for (_, secret_candidates_from_filter) in filters_to_secret_candidates_for_query.iter() {
@@ -157,7 +192,8 @@ fn compute_hashmap_cost(filters_to_secret_candidates_for_query: &HashMap<Filter,
 }
 
 fn compute_query_cost(query: &Word, word_bank: &Vec<Word>) -> (usize, HashMap<Filter, Vec<Word>>) {
-    let filters_to_secret_candidates_for_query = compute_filters_to_secret_candidates_for_query(&query, &word_bank);
+    let filters_to_secret_candidates_for_query =
+        compute_filters_to_secret_candidates_for_query(&query, &word_bank);
     let hashmap_cost = compute_hashmap_cost(&filters_to_secret_candidates_for_query);
     (hashmap_cost, filters_to_secret_candidates_for_query)
 }
@@ -177,7 +213,7 @@ fn get_filter_from_input() -> Filter {
             "gray" => filter.colors[idx] = Color::GRAY,
             "yellow" => filter.colors[idx] = Color::YELLOW,
             "green" => filter.colors[idx] = Color::GREEN,
-            _ => ()
+            _ => (),
         }
     }
 
@@ -200,8 +236,15 @@ fn compute_best_query(word_bank: &Vec<Word>) -> Word {
 
 fn main() {
     // Uncomment to test what filter will be generated by a query and a secret
-    // println!("final filter: {:?}", compute_filter(&String::from("oooll"), &String::from("llool")));
-    // return;
+    // Should be yellow, grey, green, yellow, green
+    println!(
+        "final filter: {}",
+        compute_filter(
+            &Word::new(&String::from("oooll")),
+            &Word::new(&String::from("llool"))
+        )
+    );
+    return;
 
     // Main application
     // TODO: Command line argument to get path to work bank
@@ -240,28 +283,32 @@ fn main() {
         println!("Filter received: {:?}", filter);
 
         // word_bank is the list of words that the filter maps to
-        word_bank = best_query_filters_to_secret_candidates.get(&filter).unwrap().clone();
+        word_bank = best_query_filters_to_secret_candidates
+            .get(&filter)
+            .unwrap()
+            .clone();
 
         // Check if word bank contains only one word
         if word_bank.len() == 1 {
             println!("FOUND: {}", word_bank[0].data);
             break;
         }
-
         // Check if word bank is empty
         else if word_bank.len() == 0 {
             println!("Couldn't find a word!");
             break;
         }
-
         // If there are only a few words left, maybe the user will want to choose a different word
         else if word_bank.len() < 20 {
             for word in &word_bank {
-                println!("Possible word: {} with cost {}", word.data, compute_query_cost(&word, &word_bank).0)
+                println!(
+                    "Possible word: {} with cost {}",
+                    word.data,
+                    compute_query_cost(&word, &word_bank).0
+                )
             }
         }
 
         guesses += 1;
     }
 }
-
