@@ -93,6 +93,7 @@ impl Filter {
 
 }
 
+// TODO: Check that query.data and secret.data have the same length
 fn compute_filter(query: &Word, secret: &Word) -> Filter {
     let mut filter = Filter::new();
 
