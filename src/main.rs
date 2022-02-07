@@ -259,8 +259,7 @@ fn main() {
         }
 
         // Supply best guess to user
-        let (_, b) = compute_query_cost(&best_query, &word_bank);
-        best_query_filters_to_secret_candidates = b;
+        best_query_filters_to_secret_candidates =compute_query_cost(&best_query ,&word_bank).1;
         println!("Best guess: {}", best_query.data);
 
         // TODO: Command line argument to decide whether to simulate with secret or play real game
@@ -269,30 +268,28 @@ fn main() {
         println!("Filter received: {:?}", filter);
 
         // word_bank is the list of words that the filter maps to
-        word_bank = best_query_filters_to_secret_candidates
-            .get(&filter)
-            .unwrap()
-            .clone();
+        word_bank = best_query_filters_to_secret_candidates.get(&filter).unwrap().clone();
 
         // Check if word bank contains only one word
-        if word_bank.len() == 1 {
-            println!("FOUND: {}", word_bank[0].data);
-            break;
-        }
-        // Check if word bank is empty
-        else if word_bank.len() == 0 {
-            println!("Couldn't find a word!");
-            break;
-        }
-        // If there are only a few words left, maybe the user will want to choose a different word
-        else if word_bank.len() < 20 {
-            for word in &word_bank {
-                println!(
-                    "Possible word: {} with cost {}",
-                    word.data,
-                    compute_query_cost(&word, &word_bank).0
-                )
+        match word_bank.len() {
+            1 => {
+                println!("FOUND: {}", word_bank[0].data);
+                break;
+            },
+            0 => {
+                println!("Couldn't find a word!");
+                break;
             }
+            2..=20 => {
+                for word in &word_bank {
+                    println!(
+                        "Possible word: {} with cost {}",
+                        word.data,
+                        compute_query_cost(&word, &word_bank).0
+                    )
+                }
+            },
+            _ => ()
         }
 
         guesses += 1;
