@@ -204,9 +204,9 @@ fn compute_hashmap_cost(filters_to_secret_candidates_for_query: &HashMap<Filter,
     cost
 }
 
-fn compute_query_cost(query: &Word, word_bank: &Vec<Word>, arg_worst_case_cost: &bool) -> (u32, HashMap<Filter, Vec<Word>>) {
+fn compute_query_cost(query: &Word, secret_candidates: &Vec<Word>, arg_worst_case_cost: &bool) -> (u32, HashMap<Filter, Vec<Word>>) {
     let filters_to_secret_candidates_for_query =
-        compute_filters_to_secret_candidates_for_query(&query, &word_bank);
+        compute_filters_to_secret_candidates_for_query(&query, &secret_candidates);
     let hashmap_cost = compute_hashmap_cost(&filters_to_secret_candidates_for_query, arg_worst_case_cost);
     (hashmap_cost, filters_to_secret_candidates_for_query)
 }
@@ -256,12 +256,12 @@ fn get_filter_from_input() -> Filter {
     filter
 }
 
-fn compute_best_query(word_bank: &Vec<Word>, arg_worst_case_cost: &bool) -> Word {
+fn compute_best_query(word_bank: &Vec<Word>, secret_candidates: &Vec<Word>, arg_worst_case_cost: &bool) -> Word {
     let mut minimum_cost_query: Word = word_bank[0].clone();
     let mut minimum_cost: u32 = u32::MAX;
 
     for query in word_bank {
-        let (cost, _) = compute_query_cost(query, word_bank, arg_worst_case_cost);
+        let (cost, _) = compute_query_cost(query, secret_candidates, arg_worst_case_cost);
         if cost < minimum_cost {
             minimum_cost = cost;
             minimum_cost_query = query.clone();
@@ -273,8 +273,8 @@ fn compute_best_query(word_bank: &Vec<Word>, arg_worst_case_cost: &bool) -> Word
 fn write_result_to_file(query: &String, guesses: &i32) {
     // Create results.txt if it does not exist
     if !Path::new("results.txt").exists() {
-        let mut file = match File::create("results.txt") {
-            Ok(p) => p,
+        let _ = match File::create("results.txt") {
+            Ok(_) => (),
             Err(_) => panic!("Could not create results.txt"),
         };
     }
@@ -310,7 +310,8 @@ fn main() {
 
     // Main application
     // TODO: Check that word bank exists by returning a Result from get_word_bank
-    let mut word_bank = get_word_bank(&arg_path);
+    let word_bank = get_word_bank(&arg_path);
+    let mut secret_candidates = word_bank.clone();
 
     /*
      * Best first word is precomputed to save time.
@@ -318,7 +319,7 @@ fn main() {
     let mut best_query: Word;
     if arg_first_guess.len() == 0 {
         println!("Computing best starting word from {}...", arg_path);
-        best_query = compute_best_query(&word_bank, &arg_worst_case_cost);
+        best_query = compute_best_query(&word_bank, &word_bank, &arg_worst_case_cost);
         println!("{}", best_query.data);
         return;
     }
@@ -338,12 +339,12 @@ fn main() {
     loop {
         // If a guess has already been made, need to compute the next best guess
         if guesses > 1 {
-            best_query = compute_best_query(&word_bank, &arg_worst_case_cost);
+            best_query = compute_best_query(&word_bank, &secret_candidates, &arg_worst_case_cost);
         }
 
         // Supply best guess to user
-        best_query_filters_to_secret_candidates = compute_query_cost(&best_query ,&word_bank, &arg_worst_case_cost).1;
-        println!("Best guess: {}", best_query.data);
+        best_query_filters_to_secret_candidates = compute_query_cost(&best_query ,&secret_candidates, &arg_worst_case_cost).1;
+        // println!("Best guess: {}", best_query.data);
 
         if arg_known_secret.len() == WORD_LENGTH {
             // Calculate filter automatically when secret word is known (testing only)
@@ -354,15 +355,15 @@ fn main() {
             filter = get_filter_from_input();
         }
 
-        println!("Filter received: {}", filter);
+        // println!("Filter received: {}", filter);
         if filter.colors == [Color::GREEN; 5] {
-            println!("FOUND: {} in {} guess{}", best_query.data, guesses, if guesses != 1 {"es"} else {""});
-            // write_result_to_file(&best_query.data, &guesses);
+            // println!("FOUND: {} in {} guess{}", best_query.data, guesses, if guesses != 1 {"es"} else {""});
+            write_result_to_file(&best_query.data, &guesses);
             break;
         }
 
-        // word_bank is the list of words that the filter maps to
-        word_bank = match best_query_filters_to_secret_candidates.get(&filter) {
+        // secret_candidates is the list of words that the filter maps to
+        secret_candidates = match best_query_filters_to_secret_candidates.get(&filter) {
             Some(candidates) => {
                 candidates.clone()
             },
@@ -372,12 +373,12 @@ fn main() {
             }
         };
 
-        // Check if word bank contains only one word
-        match word_bank.len() {
+        // Check if secret_candidates contains only one word
+        match secret_candidates.len() {
             1 => {
                 guesses += 1;
-                println!("FOUND: {} in {} guess{}", word_bank[0].data, guesses, if guesses > 1 { "es" } else { "" });
-                // write_result_to_file(&word_bank[0].data, &guesses);
+                // println!("FOUND: {} in {} guess{}", &secret_candidates[0].data, guesses, if guesses > 1 { "es" } else { "" });
+                write_result_to_file(&secret_candidates[0].data, &guesses);
                 break;
             },
             0 => {
@@ -386,15 +387,15 @@ fn main() {
             }
             2..=20 => {
                 guesses += 1;
-                for word in &word_bank {
-                    println!("Possible word: {} with cost {}", word.data, compute_query_cost(&word, &word_bank, &arg_worst_case_cost).0);
-                }
+                // for word in &secret_candidates {
+                    // println!("Possible solution: {} with cost {}", word.data, compute_query_cost(&word, &secret_candidates, &arg_worst_case_cost).0);
+                // }
             },
             _ => {
                 guesses += 1;
-                for word in &word_bank {
-                    println!("Possible word: {} with cost {}", word.data, compute_query_cost(&word, &word_bank, &arg_worst_case_cost).0);
-                }
+                // for word in &secret_candidates {
+                //     println!("Possible solution: {} with cost {}", word.data, compute_query_cost(&word, &secret_candidates, &arg_worst_case_cost).0);
+                // }
             },
         }
     }
