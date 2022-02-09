@@ -16,7 +16,7 @@ use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
 use std::path::Path;
-use argparse::{ArgumentParser, StoreTrue, Store};
+use argparse::{ArgumentParser, Store};
 
 
 #[derive(Debug)]
@@ -185,29 +185,23 @@ fn compute_filters_to_secret_candidates_for_query( query: &Word, secret_candidat
     filters_to_secret_candidates
 }
 
-fn compute_hashmap_cost(filters_to_secret_candidates_for_query: &HashMap<Filter, Vec<Word>>, arg_worst_case_cost: &bool) -> u32 {
+fn compute_hashmap_cost(filters_to_secret_candidates_for_query: &HashMap<Filter, Vec<Word>>) -> u32 {
     let mut cost: u32 = 0;
 
     for (_, secret_candidates_from_filter) in filters_to_secret_candidates_for_query.iter() {
         // cost is worst-case performance
-        if *arg_worst_case_cost {
-            if secret_candidates_from_filter.len() as u32 > cost {
-                cost = secret_candidates_from_filter.len() as u32
-            }
-        }
-        else {
-            // cost is average performance
-            cost += secret_candidates_from_filter.len() as u32
+        if secret_candidates_from_filter.len() as u32 > cost {
+            cost = secret_candidates_from_filter.len() as u32
         }
     }
 
     cost
 }
 
-fn compute_query_cost(query: &Word, secret_candidates: &Vec<Word>, arg_worst_case_cost: &bool) -> (u32, HashMap<Filter, Vec<Word>>) {
+fn compute_query_cost(query: &Word, secret_candidates: &Vec<Word>) -> (u32, HashMap<Filter, Vec<Word>>) {
     let filters_to_secret_candidates_for_query =
         compute_filters_to_secret_candidates_for_query(&query, &secret_candidates);
-    let hashmap_cost = compute_hashmap_cost(&filters_to_secret_candidates_for_query, arg_worst_case_cost);
+    let hashmap_cost = compute_hashmap_cost(&filters_to_secret_candidates_for_query);
     (hashmap_cost, filters_to_secret_candidates_for_query)
 }
 
@@ -256,12 +250,12 @@ fn get_filter_from_input() -> Filter {
     filter
 }
 
-fn compute_best_query(word_bank: &Vec<Word>, secret_candidates: &Vec<Word>, arg_worst_case_cost: &bool) -> Word {
+fn compute_best_query(word_bank: &Vec<Word>, secret_candidates: &Vec<Word>) -> Word {
     let mut minimum_cost_query: Word = word_bank[0].clone();
     let mut minimum_cost: u32 = u32::MAX;
 
     for query in word_bank {
-        let (cost, _) = compute_query_cost(query, secret_candidates, arg_worst_case_cost);
+        let (cost, _) = compute_query_cost(query, secret_candidates);
         if cost < minimum_cost {
             minimum_cost = cost;
             minimum_cost_query = query.clone();
@@ -281,22 +275,21 @@ fn write_result_to_file(query: &String, guesses: &i32) {
 
     // Write to results.txt
     let mut file = OpenOptions::new().append(true).open("results.txt").unwrap();
-    // let results = format!("{} {}", query, guesses);
     if let Err(e) = writeln!(file, "{} {}", query, guesses) {
         eprintln!("Couldn't write to file {}", e);
     }
 }
 
 fn main() {
-    let mut arg_worst_case_cost: bool = false;
-    let mut arg_path: String = "sgb-words.txt".to_string();
+    let mut arg_path_queries: String = "queries.txt".to_string();
+    let mut arg_path_solutions: String = "solutions.txt".to_string();
     let mut arg_first_guess: String = "".to_string();
     let mut arg_known_secret: String ="".to_string();
     {
         let mut ap = ArgumentParser::new();
         ap.set_description("Solve Wordle.");
-        ap.refer(&mut arg_worst_case_cost).add_option(&["-c"], StoreTrue, "Use worst case cost function instead of average");
-        ap.refer(&mut arg_path).add_option(&["--path"], Store, "Path to word bank");
+        ap.refer(&mut arg_path_queries).add_option(&["--queries"], Store, "Path to query word bank");
+        ap.refer(&mut arg_path_solutions).add_option(&["--solutions"], Store, "Path to solution word bank");
         ap.refer(&mut arg_first_guess).add_option(&["-g", "--guess"], Store, "First guess. If unspecified, compute best first guess based on word bank and cost function, and exit program.");
         ap.refer(&mut arg_known_secret).add_option(&["-s", "--secret"], Store, "Simulate program on a known secret.");
         ap.parse_args_or_exit();
@@ -310,16 +303,16 @@ fn main() {
 
     // Main application
     // TODO: Check that word bank exists by returning a Result from get_word_bank
-    let word_bank = get_word_bank(&arg_path);
-    let mut secret_candidates = word_bank.clone();
+    let word_bank = get_word_bank(&arg_path_queries);
+    let mut secret_candidates = get_word_bank(&arg_path_solutions);
 
     /*
      * Best first word is precomputed to save time.
      */
     let mut best_query: Word;
     if arg_first_guess.len() == 0 {
-        println!("Computing best starting word from {}...", arg_path);
-        best_query = compute_best_query(&word_bank, &word_bank, &arg_worst_case_cost);
+        println!("Computing best starting word from {}...", arg_path_queries);
+        best_query = compute_best_query(&word_bank, &secret_candidates);
         println!("{}", best_query.data);
         return;
     }
@@ -339,12 +332,12 @@ fn main() {
     loop {
         // If a guess has already been made, need to compute the next best guess
         if guesses > 1 {
-            best_query = compute_best_query(&word_bank, &secret_candidates, &arg_worst_case_cost);
+            best_query = compute_best_query(&word_bank, &secret_candidates);
         }
 
         // Supply best guess to user
-        best_query_filters_to_secret_candidates = compute_query_cost(&best_query ,&secret_candidates, &arg_worst_case_cost).1;
-        println!("Best guess: {}", best_query.data);
+        best_query_filters_to_secret_candidates = compute_query_cost(&best_query ,&secret_candidates).1;
+        // println!("Best guess: {}", best_query.data);
 
         if arg_known_secret.len() == WORD_LENGTH {
             // Calculate filter automatically when secret word is known (testing only)
@@ -355,10 +348,10 @@ fn main() {
             filter = get_filter_from_input();
         }
 
-        println!("Filter received: {}", filter);
+        // println!("Filter received: {}", filter);
         if filter.colors == [Color::GREEN; 5] {
-            println!("FOUND: {} in {} guess{}", best_query.data, guesses, if guesses != 1 {"es"} else {""});
-            // write_result_to_file(&best_query.data, &guesses);
+            // println!("FOUND: {} in {} guess{}", best_query.data, guesses, if guesses != 1 {"es"} else {""});
+            write_result_to_file(&best_query.data, &guesses);
             break;
         }
 
@@ -377,24 +370,24 @@ fn main() {
         match secret_candidates.len() {
             1 => {
                 guesses += 1;
-                println!("FOUND: {} in {} guess{}", &secret_candidates[0].data, guesses, if guesses > 1 { "es" } else { "" });
-                // write_result_to_file(&secret_candidates[0].data, &guesses);
+                // println!("FOUND: {} in {} guess{}", &secret_candidates[0].data, guesses, if guesses > 1 { "es" } else { "" });
+                write_result_to_file(&secret_candidates[0].data, &guesses);
                 break;
             },
             0 => {
-                println!("Couldn't find a word!");
+                // println!("Couldn't find a word!");
                 break;
             }
             2..=20 => {
                 guesses += 1;
-                for word in &secret_candidates {
-                    println!("Possible solution: {} with cost {}", word.data, compute_query_cost(&word, &secret_candidates, &arg_worst_case_cost).0);
-                }
+                // for word in &secret_candidates {
+                //     println!("Possible solution: {} with cost {}", word.data, compute_query_cost(&word, &secret_candidates).0);
+                // }
             },
             _ => {
                 guesses += 1;
                 // for word in &secret_candidates {
-                //     println!("Possible solution: {} with cost {}", word.data, compute_query_cost(&word, &secret_candidates, &arg_worst_case_cost).0);
+                //     println!("Possible solution: {} with cost {}", word.data, compute_query_cost(&word, &secret_candidates).0);
                 // }
             },
         }
