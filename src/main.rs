@@ -5,6 +5,8 @@
 #![allow(dead_code)]
 #![allow(unreachable_code)]
 
+extern crate argparse;
+
 use std::cmp::min;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -13,6 +15,7 @@ use std::fmt;
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
+use argparse::{ArgumentParser, StoreTrue, Store};
 
 
 #[derive(Debug)]
@@ -28,10 +31,10 @@ impl MyErr {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct Word {
-    map: HashMap<u8, HashSet<usize>>,
     data: String,
+    map: HashMap<u8, HashSet<usize>>,
 }
 
 impl Word {
@@ -83,7 +86,7 @@ fn get_word_bank(fname: &str) -> Vec<Word> {
     word_bank_word
 }
 
-#[derive(PartialEq, Eq, Hash, Clone, Debug)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 enum Color {
     GRAY,
     YELLOW,
@@ -168,33 +171,43 @@ fn compute_filters_to_secret_candidates_for_query( query: &Word, secret_candidat
         let filter = compute_filter(&query, &secret);
         let mapped_candidates = filters_to_secret_candidates.get_mut(&filter);
         match mapped_candidates {
-            Some(p) => p.push(secret.clone()),
-            None => drop(filters_to_secret_candidates.insert(filter.clone(), Vec::new())),
+            Some(p) => {
+                p.push(secret.clone());
+            },
+            None => match filters_to_secret_candidates.insert(filter.clone(), vec![secret.clone()]) {
+                Some(_) => (),
+                None => ()
             }
+        }
     }
 
     filters_to_secret_candidates
 }
 
-fn compute_hashmap_cost(
-    filters_to_secret_candidates_for_query: &HashMap<Filter, Vec<Word>>,
-) -> usize {
-    let mut max_count: usize = 0;
+fn compute_hashmap_cost(filters_to_secret_candidates_for_query: &HashMap<Filter, Vec<Word>>, arg_worst_case_cost: &bool) -> u32 {
+    let mut cost: u32 = 0;
 
     for (_, secret_candidates_from_filter) in filters_to_secret_candidates_for_query.iter() {
         // cost is worst-case performance
-        if secret_candidates_from_filter.len() > max_count {
-            max_count = secret_candidates_from_filter.len();
+        if *arg_worst_case_cost  {
+            if secret_candidates_from_filter.len() as u32 > cost {
+                cost = secret_candidates_from_filter.len() as u32
+            }
         }
+        else {
+            // cost is average performance
+            cost += secret_candidates_from_filter.len() as u32
+        }
+
     }
 
-    max_count
+    cost
 }
 
-fn compute_query_cost(query: &Word, word_bank: &Vec<Word>) -> (usize, HashMap<Filter, Vec<Word>>) {
+fn compute_query_cost(query: &Word, word_bank: &Vec<Word>, arg_worst_case_cost: &bool) -> (u32, HashMap<Filter, Vec<Word>>) {
     let filters_to_secret_candidates_for_query =
         compute_filters_to_secret_candidates_for_query(&query, &word_bank);
-    let hashmap_cost = compute_hashmap_cost(&filters_to_secret_candidates_for_query);
+    let hashmap_cost = compute_hashmap_cost(&filters_to_secret_candidates_for_query, arg_worst_case_cost);
     (hashmap_cost, filters_to_secret_candidates_for_query)
 }
 
@@ -243,12 +256,12 @@ fn get_filter_from_input() -> Filter {
     filter
 }
 
-fn compute_best_query(word_bank: &Vec<Word>) -> Word {
+fn compute_best_query(word_bank: &Vec<Word>, arg_worst_case_cost: &bool) -> Word {
     let mut minimum_cost_query: Word = word_bank[0].clone();
-    let mut minimum_cost: usize = usize::MAX;
+    let mut minimum_cost: u32 = u32::MAX;
 
     for query in word_bank {
-        let (cost, _) = compute_query_cost(query, word_bank);
+        let (cost, _) = compute_query_cost(query, word_bank, arg_worst_case_cost);
         if cost < minimum_cost {
             minimum_cost = cost;
             minimum_cost_query = query.clone();
@@ -257,7 +270,27 @@ fn compute_best_query(word_bank: &Vec<Word>) -> Word {
     minimum_cost_query
 }
 
+
+
 fn main() {
+    let mut arg_worst_case_cost: bool = false;
+    let mut arg_path: String = "sgb-words.txt".to_string();
+    let mut arg_first_guess: String = "".to_string();
+    let mut arg_known_secret: String ="".to_string();
+    {
+        let mut ap = ArgumentParser::new();
+        ap.set_description("Solve Wordle.");
+        ap.refer(&mut arg_worst_case_cost).add_option(&["-c"], StoreTrue, "Use worst case cost function instead of average");
+        ap.refer(&mut arg_path).add_option(&["--path"], Store, "Path to word bank");
+        ap.refer(&mut arg_first_guess).add_option(&["-g", "--guess"], Store, "First guess. If unspecified, compute best first guess based on word bank and cost function, and exit program.");
+        ap.refer(&mut arg_known_secret).add_option(&["-s", "--secret"], Store, "Simulate program on a known secret.");
+        ap.parse_args_or_exit();
+    }
+    // println!("worst case cost: {}", arg_worst_case_cost);
+    // println!("path: {}", arg_path);
+    // println!("first_guess: {}", arg_first_guess);
+    // println!("known_secret: {}", arg_known_secret);
+    // TODO: Command line argument to do filter generation test
     // Uncomment to test what filter will be generated by a query and a secret
     // Should be yellow, grey, green, yellow, green
 
@@ -265,53 +298,77 @@ fn main() {
     // return;
 
     // Main application
-    // TODO: Command line argument to get path to work bank
-    let mut word_bank = get_word_bank("sgb-words.txt");
+    // TODO: Check that word bank exists by returning a Result from get_word_bank
+    let mut word_bank = get_word_bank(&arg_path);
+    // println!("Got word bank from {}", arg_path);
 
     /*
      * Best first word is precomputed to save time.
-     * To compute best first word, uncomment the next two lines.
-     * When the first best word has been found, comment the next two lines and type it
-     * into the Word constructor for best_query below.
      */
-    // TODO: Command line argument to decide whether or not to compute best word
-    // println!("{}", compute_best_query(&word_bank).data);
-    // return;
+    let mut best_query: Word;
+    if arg_first_guess.len() == 0 {
+        println!("Computing best starting word from {}...", arg_path);
+        best_query = compute_best_query(&word_bank, &arg_worst_case_cost);
+        println!("{}", best_query.data);
+        return;
+    }
+    else if arg_first_guess.len() == WORD_LENGTH {
+        best_query = Word::new(&arg_first_guess.to_string());
+    }
+    else {
+        println!("Guess must be {} letters long", WORD_LENGTH);
+        return;
+    }
 
-    let mut best_query = Word::new(&String::from("aloes"));
     let mut best_query_filters_to_secret_candidates: HashMap<Filter, Vec<Word>>;
 
-    let mut guesses = 0;
+    let mut guesses = 1;
     let mut filter: Filter;
 
     loop {
         // If a guess has already been made, need to compute the next best guess
-        if guesses > 0 {
-            best_query = compute_best_query(&word_bank);
+        if guesses > 1 {
+            best_query = compute_best_query(&word_bank, &arg_worst_case_cost);
         }
 
         // Supply best guess to user
-        best_query_filters_to_secret_candidates =compute_query_cost(&best_query ,&word_bank).1;
-        println!("Best guess: {}", best_query.data);
+        best_query_filters_to_secret_candidates = compute_query_cost(&best_query ,&word_bank, &arg_worst_case_cost).1;
+        // println!("Best guess: {}", best_query.data);
 
-        // TODO: Command line argument to decide whether to simulate with secret or play real game
-        filter = get_filter_from_input(); // Get filter from user
-        // filter = compute_filter(&best_query, &Word::new(&String::from("skill"))); // Calculate filter automatically when secret word is known (testing only)
-        println!("Filter received: {}", filter);
+        if arg_known_secret.len() == WORD_LENGTH {
+            // Calculate filter automatically when secret word is known (testing only)
+            filter = compute_filter(&best_query, &Word::new(&String::from(&arg_known_secret)));
+        }
+        else {
+            // Get filter from user
+            filter = get_filter_from_input();
+        }
+
+        // println!("Filter received: {}", filter);
+        if filter.colors == [Color::GREEN; 5] {
+            println!("FOUND: {} in {} guess{}", best_query.data, guesses, if guesses != 1 {"es"} else {""});
+            break;
+        }
 
         // word_bank is the list of words that the filter maps to
         word_bank = match best_query_filters_to_secret_candidates.get(&filter) {
-            Some(candidates) => candidates.clone(),
+            Some(candidates) => {
+                candidates.clone()
+            },
             None => {
                 println!("Couldn't find a word!");
                 return;
             }
         };
 
+
+        // word_bank.sort_by(|a, b| a.data.cmp(&b.data));
+
         // Check if word bank contains only one word
         match word_bank.len() {
             1 => {
-                println!("FOUND: {}", word_bank[0].data);
+                guesses += 1;
+                println!("FOUND: {} in {} guess{}", word_bank[0].data, guesses, if guesses > 1 { "es" } else { "" });
                 break;
             },
             0 => {
@@ -319,17 +376,12 @@ fn main() {
                 break;
             }
             2..=20 => {
-                for word in &word_bank {
-                    println!(
-                        "Possible word: {} with cost {}",
-                        word.data,
-                        compute_query_cost(&word, &word_bank).0
-                    )
-                }
+                guesses += 1;
+                // for word in &word_bank {
+                    // println!("Possible word: {} with cost {}", word.data, compute_query_cost(&word, &word_bank, &arg_worst_case_cost).0);
+                // }
             },
-            _ => ()
+            _ => guesses += 1,
         }
-
-        guesses += 1;
     }
 }

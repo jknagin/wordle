@@ -8,3 +8,4 @@ authors = ["Jay Nagin <jknagin@gmail.com>"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+argparse = "0.2.2"
