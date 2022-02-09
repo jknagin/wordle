@@ -288,10 +288,10 @@ fn main() {
     {
         let mut ap = ArgumentParser::new();
         ap.set_description("Solve Wordle.");
-        ap.refer(&mut arg_path_queries).add_option(&["--queries"], Store, "Path to query word bank");
-        ap.refer(&mut arg_path_solutions).add_option(&["--solutions"], Store, "Path to solution word bank");
         ap.refer(&mut arg_first_guess).add_option(&["-g", "--guess"], Store, "First guess. If unspecified, compute best first guess based on word bank and cost function, and exit program.");
+        ap.refer(&mut arg_path_queries).add_option(&["--queries"], Store, "Path to query word bank");
         ap.refer(&mut arg_known_secret).add_option(&["-s", "--secret"], Store, "Simulate program on a known secret.");
+        ap.refer(&mut arg_path_solutions).add_option(&["--solutions"], Store, "Path to solution word bank");
         ap.parse_args_or_exit();
     }
     // TODO: Command line argument to do filter generation test
@@ -337,7 +337,7 @@ fn main() {
 
         // Supply best guess to user
         best_query_filters_to_secret_candidates = compute_query_cost(&best_query ,&secret_candidates).1;
-        // println!("Best guess: {}", best_query.data);
+        println!("Best guess: {}", best_query.data);
 
         if arg_known_secret.len() == WORD_LENGTH {
             // Calculate filter automatically when secret word is known (testing only)
@@ -348,10 +348,10 @@ fn main() {
             filter = get_filter_from_input();
         }
 
-        // println!("Filter received: {}", filter);
+        println!("Filter received: {}", filter);
         if filter.colors == [Color::GREEN; 5] {
-            // println!("FOUND: {} in {} guess{}", best_query.data, guesses, if guesses != 1 {"es"} else {""});
-            write_result_to_file(&best_query.data, &guesses);
+            println!("FOUND: {} in {} guess{}", best_query.data, guesses, if guesses != 1 {"es"} else {""});
+            // write_result_to_file(&best_query.data, &guesses);
             break;
         }
 
@@ -370,19 +370,19 @@ fn main() {
         match secret_candidates.len() {
             1 => {
                 guesses += 1;
-                // println!("FOUND: {} in {} guess{}", &secret_candidates[0].data, guesses, if guesses > 1 { "es" } else { "" });
-                write_result_to_file(&secret_candidates[0].data, &guesses);
+                println!("FOUND: {} in {} guess{}", &secret_candidates[0].data, guesses, if guesses > 1 { "es" } else { "" });
+                // write_result_to_file(&secret_candidates[0].data, &guesses);
                 break;
             },
             0 => {
-                // println!("Couldn't find a word!");
+                println!("Couldn't find a word!");
                 break;
             }
             2..=20 => {
                 guesses += 1;
-                // for word in &secret_candidates {
-                //     println!("Possible solution: {} with cost {}", word.data, compute_query_cost(&word, &secret_candidates).0);
-                // }
+                for word in &secret_candidates {
+                    println!("Possible solution: {} with cost {}", word.data, compute_query_cost(&word, &secret_candidates).0);
+                }
             },
             _ => {
                 guesses += 1;
