@@ -11,4 +11,4 @@ Cargo.lock
 
 wordle.iml
 .idea/
-*.txt
+.vscode/
