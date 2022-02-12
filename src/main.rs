@@ -15,6 +15,7 @@ use std::fmt;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::prelude::*;
+use std::io::BufReader;
 use std::path::Path;
 use argparse::{ArgumentParser, Store};
 
@@ -39,7 +40,7 @@ struct Word {
 }
 
 impl Word {
-    fn new(word_string: &String) -> Self {
+    fn new(word_string: &str) -> Self {
         let mut map_: HashMap<u8, HashSet<usize>> = HashMap::new();
         for (idx, letter) in word_string.chars().enumerate() {
             let indices = map_.entry(letter as u8).or_insert(HashSet::new());
@@ -47,14 +48,14 @@ impl Word {
         }
         Word {
             map: map_,
-            data: word_string.clone(),
+            data: word_string.to_string(),
         }
     }
 }
 
 fn get_word_bank(fname: &str) -> Vec<Word> {
     let path = Path::new(fname);
-    let mut file = match File::open(path) {
+    let file = match File::open(path) {
         Ok(file) => file,
         Err(err) => panic!(
             "Could not open {display} because {err}",
@@ -63,28 +64,13 @@ fn get_word_bank(fname: &str) -> Vec<Word> {
         ),
     };
 
-    let mut contents = String::new();
-    match file.read_to_string(&mut contents) {
-        Ok(_) => (),
-        Err(err) => panic!(
-            "Could not read {display} because {err}",
-            display = path.display(),
-            err = err
-        ),
-    };
+    let bf = BufReader::new(file);
 
-    let newline: String = match env::consts::OS {
-        "windows" => String::from("\r\n"),
-        _ => String::from("\n"),
-    };
-
-    let word_bank: Vec<&str> = contents.split(&newline).collect();
-    let mut word_bank_word: Vec<Word> = Vec::new();
-    for word in word_bank {
-        let w: Word = Word::new(&String::from(word));
-        word_bank_word.push(w);
+    let mut word_bank: Vec<Word> = Vec::new();
+    for line in bf.lines() {
+        word_bank.push(Word::new(&line.unwrap()));
     }
-    word_bank_word
+    word_bank
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
@@ -97,7 +83,7 @@ enum Color {
 impl fmt::Display for Color {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Color::GRAY => write!(f, "{}", "\u{2B1B}"),
+            Color::GRAY => write!(f, "{}", '\u{2B1B}'),
             Color::YELLOW => write!(f, "{}", '\u{1F7E8}'),
             Color::GREEN => write!(f, "{}", '\u{1F7E9}'),
         }
@@ -350,10 +336,8 @@ fn main() {
         }
 
         // Print filter to user
-        println!("Filter received: {}", filter);
         if filter.colors == [Color::GREEN; 5] {
             println!("FOUND: {} in {} guess{}", best_query.data, guesses, if guesses != 1 {"es"} else {""});
-            // write_result_to_file(&best_query.data, &guesses);
             break;
         }
 
@@ -377,20 +361,10 @@ fn main() {
             1 => {
                 guesses += 1;
                 println!("FOUND: {} in {} guess{}", &secret_candidates[0].data, guesses, if guesses > 1 { "es" } else { "" });
-                // write_result_to_file(&secret_candidates[0].data, &guesses);
                 break;
-            },
-            2..=20 => {
-                guesses += 1;
-                for word in &secret_candidates {
-                    println!("Possible solution: {} with cost {}", word.data, compute_query_cost(&word, &secret_candidates).0);
-                }
             },
             _ => {
                 guesses += 1;
-                // for word in &secret_candidates {
-                //     println!("Possible solution: {} with cost {}", word.data, compute_query_cost(&word, &secret_candidates).0);
-                // }
             },
         }
     }
