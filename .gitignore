@@ -12,3 +12,4 @@ Cargo.lock
 wordle.iml
 .idea/
 .vscode/
+.DS_STORE
