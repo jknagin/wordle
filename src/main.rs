@@ -11,7 +11,7 @@ fn main() {
         let mut ap = ArgumentParser::new();
         ap.set_description("Solve Wordle.");
         ap.refer(&mut arg_path_queries).add_option(&["--queries"], Store, "Path to query word bank");
-        ap.refer(&mut arg_known_secret).add_option(&["-s", "--secret"], Store, "Simulate program on a known secret.");
+        ap.refer(&mut arg_known_secret).add_option(&["--secret"], Store, "Simulate program on a known secret.");
         ap.refer(&mut arg_path_solutions).add_option(&["--solutions"], Store, "Path to solution word bank");
         ap.parse_args_or_exit();
     }
