@@ -7,6 +7,11 @@ use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::Path;
 
+
+pub const WORD_LENGTH: usize = 5;
+pub const QUERY_FILENAME: &str = "queries.txt";
+pub const SOLUTION_FILENAME: &str = "solutions.txt";
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Word {
     pub data: String,
@@ -27,8 +32,16 @@ impl Word {
     }
 }
 
+pub fn get_query_bank() -> Vec<Word> {
+    get_word_bank(QUERY_FILENAME)
+}
+
+pub fn get_solution_bank() -> Vec<Word> {
+    get_word_bank(SOLUTION_FILENAME)
+}
+
 // TODO: Return Option in case file name does not exist
-pub fn get_word_bank(fname: &str) -> Vec<Word> {
+fn get_word_bank(fname: &str) -> Vec<Word> {
     let path = Path::new(fname);
     let file = match File::open(path) {
         Ok(file) => file,
@@ -64,8 +77,6 @@ impl fmt::Display for Color {
         }
     }
 }
-
-pub const WORD_LENGTH: usize = 5;
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct Filter {
@@ -234,4 +245,27 @@ fn compute_query_cost(query: &Word, secret_candidates: &Vec<Word>) -> (u32, Hash
         compute_filters_to_secret_candidates_for_query(&query, &secret_candidates);
     let hashmap_cost = compute_hashmap_cost(&filters_to_secret_candidates_for_query);
     (hashmap_cost, filters_to_secret_candidates_for_query)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::wordle::{Word, Color, compute_filter, compute_best_query, get_query_bank, get_solution_bank};
+
+    fn test_compute_filter_helper(query: &str, secret: &str) -> [Color; 5] {
+        compute_filter(&Word::new(&query), &Word::new(&secret)).colors
+    }
+
+    #[test]
+    fn test_compute_filter() {
+        assert_eq!(test_compute_filter_helper("oooll", "llool"), [Color::YELLOW, Color::GRAY, Color::GREEN, Color::YELLOW, Color::GREEN]);
+        assert_eq!(test_compute_filter_helper("alaap", "pause"), [Color::YELLOW, Color::GRAY, Color::GRAY, Color::GRAY, Color::YELLOW]);
+        assert_eq!(test_compute_filter_helper("bench", "bench"), [Color::GREEN, Color::GREEN, Color::GREEN, Color::GREEN, Color::GREEN]);
+    }
+
+    #[test]
+    fn test_compute_best_query() {
+        let word_bank = get_query_bank();
+        let secret_candidates = get_solution_bank();
+        assert_eq!(compute_best_query(&word_bank, &secret_candidates), Word::new("aesir"));
+    }
 }
