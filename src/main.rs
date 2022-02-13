@@ -1,4 +1,5 @@
 mod wordle;
+mod test;
 extern crate argparse;
 
 use argparse::{ArgumentParser, Store};
