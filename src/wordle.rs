@@ -345,7 +345,7 @@ fn get_sorted_filters(hashmap: &HashMap<Filter, Vec<Word>>) -> Vec<Filter> {
     filters
 }
 
-fn dfs(word_bank: &Vec<Word>, filter: Filter, secret_candidates: Vec<Word>, mut root_to_leaf_path: Vec<StringFilter>, file: &mut File) -> Vec<StringFilter> {
+fn dfs(word_bank: &Vec<Word>, filter: Filter, secret_candidates: Vec<Word>, root_to_leaf_path: &mut Vec<StringFilter>, file: &mut File) {
     root_to_leaf_path.push(StringFilter::Filter(filter));
     if secret_candidates.len() == 1 {
         root_to_leaf_path.push(StringFilter::String(secret_candidates[0].data.clone()));
@@ -368,13 +368,12 @@ fn dfs(word_bank: &Vec<Word>, filter: Filter, secret_candidates: Vec<Word>, mut 
         
         for filter_ref in filters.iter() { 
             let filter = (*filter_ref).clone();
-            root_to_leaf_path = dfs(&word_bank, filter, hashmap.get(&filter).expect("Couldn't find the filter in the hash table.").to_owned(), root_to_leaf_path, file); 
+            dfs(&word_bank, filter, hashmap.get(&filter).expect("Couldn't find the filter in the hash table.").to_owned(), root_to_leaf_path, file); 
         }
     }
 
     root_to_leaf_path.pop();
     root_to_leaf_path.pop();
-    root_to_leaf_path
 }
 
 
@@ -390,6 +389,6 @@ pub fn solve() {
     let mut file = File::create("solution_map.txt").unwrap();
     for filter_ref in filters.iter() { 
         let filter = (*filter_ref).clone();
-        root_to_leaf_path = dfs(&word_bank, filter, hashmap.get(&filter).unwrap().to_owned(), root_to_leaf_path, &mut file); 
+        dfs(&word_bank, filter, hashmap.get(&filter).unwrap().to_owned(), &mut root_to_leaf_path, &mut file); 
     }
 }
