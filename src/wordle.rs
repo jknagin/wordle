@@ -77,7 +77,7 @@ impl fmt::Display for Color {
     }
 }
 
-#[derive(PartialEq, Eq, Hash, Clone, Debug)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug, Copy)]
 pub struct Filter {
     pub colors: [Color; WORD_LENGTH],
 }
@@ -91,6 +91,19 @@ impl Filter {
 
     pub fn is_green(&self) -> bool {
         self.colors == [Color::GREEN; 5]
+    }
+
+    fn to_value(&self) -> u8 {
+        let mut value: u8 = 0;
+        for (i, color) in self.colors.iter().enumerate() {
+            value += 3u8.pow((self.colors.len() as u32) - 1 - i as u32) * match color {
+                Color::GRAY => 0,
+                Color::YELLOW => 1,
+                Color::GREEN => 2, 
+            };
+        }
+        
+        value
     }
 }
 
@@ -188,17 +201,24 @@ pub fn get_filter_from_input() -> Filter {
 }
 
 pub fn compute_best_query(word_bank: &Vec<Word>, secret_candidates: &Vec<Word>) -> Word {
+    compute_best_query_and_hashmap(word_bank, secret_candidates).0
+}
+
+fn compute_best_query_and_hashmap(word_bank: &Vec<Word>, secret_candidates: &Vec<Word>) -> (Word, HashMap<Filter, Vec<Word>>) {
     let mut minimum_cost_query: Word = word_bank[0].clone();
     let mut minimum_cost: u32 = u32::MAX;
+    let mut minimum_cost_hashmap: HashMap<Filter, Vec<Word>> = HashMap::new();
 
     for query in word_bank {
-        let (cost, _) = compute_query_cost(query, secret_candidates);
+        let (cost, hashmap) = compute_query_cost(query, secret_candidates);
         if cost < minimum_cost {
-            minimum_cost = cost;
             minimum_cost_query = query.clone();
+            minimum_cost = cost;
+            minimum_cost_hashmap = hashmap;
+
         }
     }
-    minimum_cost_query
+    (minimum_cost_query, minimum_cost_hashmap)
 }
 
 // TODO: Return Option and check in main, in case user-provided filter does not exist in hashmap
@@ -244,4 +264,132 @@ fn compute_query_cost(query: &Word, secret_candidates: &Vec<Word>) -> (u32, Hash
         compute_filters_to_secret_candidates_for_query(&query, &secret_candidates);
     let hashmap_cost = compute_hashmap_cost(&filters_to_secret_candidates_for_query);
     (hashmap_cost, filters_to_secret_candidates_for_query)
+}
+
+pub fn play(arg_known_secret: &str) {
+    let word_bank = get_query_bank();
+    let mut secret_candidates = get_solution_bank();
+
+    let mut best_query = Word::new("aesir");
+
+    let mut guesses = 1;
+    let mut filter: Filter;
+
+    loop {
+        // If a guess has already been made, need to compute the next best guess
+        if guesses > 1 {
+            best_query = compute_best_query(&word_bank, &secret_candidates);
+        }
+
+        // Supply best guess to user
+        println!("Best guess: {}", best_query.data);
+
+        // If secret word is not known, get filter from user
+        if arg_known_secret.len() == 0 {
+            filter = get_filter_from_input();
+        }
+        // Calculate filter automatically when secret word is known (testing only)
+        else {
+            filter = compute_filter(&best_query, &Word::new(&arg_known_secret));
+        }
+
+        // If filter is all green, print solution and return
+        if filter.is_green() {
+            println!("FOUND: {} in {} guess{}", best_query.data, guesses, if guesses != 1 {"es"} else {""});
+            break;
+        }
+
+        // secret_candidates is the list of possible solutions that the filter maps to
+        secret_candidates = filter_secret_candidates(&best_query, &filter, &secret_candidates);
+
+        // Check if secret_candidates contains only one word
+        match secret_candidates.len() {
+            0 => {
+                println!("Couldn't find a word!");
+                break;
+            },
+            1 => {
+                guesses += 1;
+                println!("FOUND: {} in {} guess{}", &secret_candidates[0].data, guesses, if guesses > 1 { "es" } else { "" });
+                break;
+            },
+            _ => {
+                guesses += 1;
+            },
+        }
+    }
+}
+
+#[derive(Debug)]
+enum StringFilter {
+    String(String),
+    Filter(Filter),
+}
+
+impl fmt::Display for StringFilter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            StringFilter::String(p) => write!(f, "{}", p),
+            StringFilter::Filter(p) => write!(f, "{}", p),
+        }
+    }
+}
+
+fn get_sorted_filters(hashmap: &HashMap<Filter, Vec<Word>>) -> Vec<Filter> {
+    let mut filters: Vec<Filter> = Vec::new();
+    for filter in hashmap.keys() {
+        filters.push(filter.clone());
+    }
+    filters.sort_by(|a, b| a.to_value().cmp(&b.to_value()));
+    
+    filters
+}
+
+fn dfs(word_bank: &Vec<Word>, filter: Filter, secret_candidates: Vec<Word>, mut root_to_leaf_path: Vec<StringFilter>, file: &mut File) -> Vec<StringFilter> {
+    root_to_leaf_path.push(StringFilter::Filter(filter));
+    if secret_candidates.len() == 1 {
+        root_to_leaf_path.push(StringFilter::String(secret_candidates[0].data.clone()));
+        // Do whatever needs to be done with root_to_leaf_path
+        for (idx, element) in root_to_leaf_path.iter().enumerate() {
+            // print!("{} ", element);
+            if idx + 1 < root_to_leaf_path.len() {
+                write!(file, "{} ", element).expect("Couldn't write to file.")
+            }
+            else {
+                write!(file, "{}\n", element).expect("Couldn't write to file.")
+            }
+        }
+    }
+    else {
+        let (query, hashmap) = compute_best_query_and_hashmap(&word_bank, &secret_candidates);
+        root_to_leaf_path.push(StringFilter::String(query.data));
+
+        let filters = get_sorted_filters(&hashmap);
+        
+        for filter_ref in filters.iter() { 
+            let filter = (*filter_ref).clone();
+            root_to_leaf_path = dfs(&word_bank, filter, hashmap.get(&filter).expect("Couldn't find the filter in the hash table.").to_owned(), root_to_leaf_path, file); 
+        }
+    }
+
+    root_to_leaf_path.pop();
+    root_to_leaf_path.pop();
+    root_to_leaf_path
+}
+
+
+pub fn solve() {
+    let word_bank = get_query_bank();
+    let secret_candidates = get_solution_bank();
+    let best_query = Word::new("aesir");
+    let hashmap = compute_filters_to_secret_candidates_for_query(&best_query, &secret_candidates);
+
+    let filters = get_sorted_filters(&hashmap);
+
+    let mut root_to_leaf_path: Vec<StringFilter> = vec![StringFilter::String(best_query.data)];
+    let mut file = File::create("solution_map.txt").unwrap();
+    for filter_ref in filters.iter() { 
+        let filter = (*filter_ref).clone();
+        root_to_leaf_path = dfs(&word_bank, filter, hashmap.get(&filter).unwrap().to_owned(), root_to_leaf_path, &mut file); 
+    }
 }
