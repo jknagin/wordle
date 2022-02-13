@@ -1,7 +1,8 @@
-use crate::wordle::{Color, Word, get_query_bank, get_solution_bank, compute_best_query, compute_filter};
+#[allow(unused_imports)]
+use crate::wordle::{Word, get_query_bank, get_solution_bank, compute_best_query, compute_filter};
 
 #[cfg(test)]
-fn test_compute_filter_helper(query: &str, secret: &str) -> [Color; 5] {
+fn test_compute_filter_helper(query: &str, secret: &str) -> [wordle::Color; 5] {
     compute_filter(&Word::new(&query), &Word::new(&secret)).colors
 }
 
