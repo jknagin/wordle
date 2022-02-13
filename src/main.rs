@@ -1,3 +1,4 @@
+mod test;
 mod wordle;
 extern crate argparse;
 
