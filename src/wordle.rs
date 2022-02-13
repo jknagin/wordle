@@ -202,7 +202,7 @@ pub fn compute_best_query(word_bank: &Vec<Word>, secret_candidates: &Vec<Word>) 
 }
 
 // TODO: Return Option and check in main, in case user-provided filter does not exist in hashmap
-pub fn filter_secret_candidates<'a>(query: &'a Word, filter: &'a Filter, secret_candidates: &'a Vec<Word>) -> Vec<Word> {
+pub fn filter_secret_candidates(query: &Word, filter: &Filter, secret_candidates: &Vec<Word>) -> Vec<Word> {
     let hashmap = compute_query_cost(&query, &secret_candidates).1;
     return hashmap.get(&filter).unwrap().to_vec();
 }
