@@ -271,6 +271,7 @@ pub fn play(arg_known_secret: &str) {
     let mut secret_candidates = get_solution_bank();
 
     let mut best_query = Word::new("aesir");
+    // let mut best_query = compute_best_query(&word_bank, &secret_candidates);
 
     let mut guesses = 1;
     let mut filter: Filter;
@@ -345,11 +346,12 @@ fn get_sorted_filters(hashmap: &HashMap<Filter, Vec<Word>>) -> Vec<Filter> {
     filters
 }
 
-fn dfs(word_bank: &Vec<Word>, filter: Filter, secret_candidates: Vec<Word>, root_to_leaf_path: &mut Vec<StringFilter>, file: &mut File) {
+fn dfs(word_bank: &Vec<Word>, filter: Filter, secret_candidates: Vec<Word>, root_to_leaf_path: &mut Vec<StringFilter>, file: &mut File, sum_path_lengths: &mut u32) {
     root_to_leaf_path.push(StringFilter::Filter(filter));
     if secret_candidates.len() == 1 {
         root_to_leaf_path.push(StringFilter::String(secret_candidates[0].data.clone()));
         // Do whatever needs to be done with root_to_leaf_path
+        *sum_path_lengths += root_to_leaf_path.len() as u32;
         for (idx, element) in root_to_leaf_path.iter().enumerate() {
             // print!("{} ", element);
             if idx + 1 < root_to_leaf_path.len() {
@@ -368,7 +370,7 @@ fn dfs(word_bank: &Vec<Word>, filter: Filter, secret_candidates: Vec<Word>, root
         
         for filter_ref in filters.iter() { 
             let filter = (*filter_ref).clone();
-            dfs(&word_bank, filter, hashmap.get(&filter).expect("Couldn't find the filter in the hash table.").to_owned(), root_to_leaf_path, file); 
+            dfs(&word_bank, filter, hashmap.get(&filter).expect("Couldn't find the filter in the hash table.").to_owned(), root_to_leaf_path, file, sum_path_lengths); 
         }
     }
 
@@ -379,16 +381,22 @@ fn dfs(word_bank: &Vec<Word>, filter: Filter, secret_candidates: Vec<Word>, root
 
 pub fn solve() {
     let word_bank = get_query_bank();
+    println!("{}", word_bank.len());
     let secret_candidates = get_solution_bank();
     let best_query = Word::new("aesir");
+    // let best_query = compute_best_query(&word_bank, &secret_candidates);
+    println!("Best query: {}", best_query.data);
     let hashmap = compute_filters_to_secret_candidates_for_query(&best_query, &secret_candidates);
 
     let filters = get_sorted_filters(&hashmap);
 
     let mut root_to_leaf_path: Vec<StringFilter> = vec![StringFilter::String(best_query.data)];
     let mut file = File::create("solution_map.txt").unwrap();
+    let mut sum_path_lengths: u32 = 0;
     for filter_ref in filters.iter() { 
         let filter = (*filter_ref).clone();
-        dfs(&word_bank, filter, hashmap.get(&filter).unwrap().to_owned(), &mut root_to_leaf_path, &mut file); 
+        dfs(&word_bank, filter, hashmap.get(&filter).unwrap().to_owned(), &mut root_to_leaf_path, &mut file, &mut sum_path_lengths); 
     }
+    let average_num_guesses: f64 = (((sum_path_lengths as f64)/(secret_candidates.len() as f64)) + 1 as f64) / 2 as f64;
+    println!("Average number of guesses: {}", average_num_guesses)
 }
