@@ -363,14 +363,11 @@ fn dfs(word_bank: &Vec<Word>, filter: Filter, secret_candidates: Vec<Word>, root
         }
     }
     else {
-        let (query, hashmap) = compute_best_query_and_hashmap(&word_bank, &secret_candidates);
+        let (query, mut hashmap) = compute_best_query_and_hashmap(&word_bank, &secret_candidates);
         root_to_leaf_path.push(StringFilter::String(query.data));
 
-        let filters = get_sorted_filters(&hashmap);
-        
-        for filter_ref in filters.iter() { 
-            let filter = (*filter_ref).clone();
-            dfs(&word_bank, filter, hashmap.get(&filter).expect("Couldn't find the filter in the hash table.").to_owned(), root_to_leaf_path, file, sum_path_lengths); 
+        for filter in get_sorted_filters(&hashmap) { 
+            dfs(&word_bank, filter, hashmap.remove(&filter).expect("Couldn't find the filter in the hash table."), root_to_leaf_path, file, sum_path_lengths); 
         }
     }
 
